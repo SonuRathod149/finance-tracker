@@ -3,83 +3,157 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Financial Dashboard</title>
-    <!-- Tailwind CSS makes the website look modern and beautiful automatically -->
+    <title>My Cloud Financial Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- PapaParse is a free tool that reads your CSV spreadsheet -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <!-- Supabase Cloud Database Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="bg-gray-50 p-6 md:p-10 font-sans">
+<body class="bg-slate-50 p-4 md:p-10 font-sans text-slate-800">
     <div class="max-w-5xl mx-auto">
-        <h1 class="text-3xl font-bold mb-8 text-slate-800 tracking-tight">Net Worth & Expenses Tracker</h1>
-        
-        <!-- This empty grid is where your spreadsheet data will appear -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight text-slate-900">Net Worth & Expenses</h1>
+                <p class="text-sm text-slate-500">Live Cloud Synced Dashboard</p>
+            </div>
+            <div id="net-worth-badge" class="bg-indigo-600 text-white px-5 py-3 rounded-xl shadow-sm">
+                <span class="text-xs uppercase tracking-wider opacity-80 block">Total Tracked</span>
+                <span id="grand-total" class="text-2xl font-bold">₹0</span>
+            </div>
+        </div>
+
+        <!-- ADD OR UPDATE ENTRY FORM -->
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-8">
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4">Add or Update Entry</h2>
+            <form id="finance-form" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <select id="category" required class="border border-slate-300 rounded-lg p-2.5 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <option value="Savings">Savings</option>
+                    <option value="Stocks">Stocks</option>
+                    <option value="Mutual Funds">Mutual Funds</option>
+                    <option value="Chits">Chits</option>
+                    <option value="Credit Cards">Credit Cards</option>
+                    <option value="Expenses">Expenses</option>
+                </select>
+                <input type="text" id="item" placeholder="Item (e.g., Zerodha, HDFC Card)" required class="border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                <input type="number" id="amount" placeholder="Amount in ₹ (e.g., 25000)" step="any" required class="border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                <button type="submit" id="submit-btn" class="bg-indigo-600 text-white font-medium rounded-lg p-2.5 text-sm hover:bg-indigo-700 transition">
+                    + Save to Cloud
+                </button>
+            </form>
+        </div>
+
+        <!-- DASHBOARD CARDS -->
         <div id="dashboard" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <p class="text-slate-500">Loading your financial data...</p>
+            <p class="text-slate-500">Connecting to cloud database...</p>
         </div>
     </div>
 
     <script>
-        // 1. Fetch the spreadsheet file
-        fetch('data.csv')
-            .then(response => response.text())
-            .then(csvText => {
-                // 2. Convert the CSV text into structured data
-                Papa.parse(csvText, {
-                    header: true,
-                    skipEmptyLines: true,
-                    complete: function(results) {
-                        buildDashboard(results.data);
-                    }
-                });
-            })
-            .catch(error => {
-                document.getElementById('dashboard').innerHTML = 
-                    `<p class="text-red-500">Could not load data.csv. Make sure the file is uploaded to GitHub!</p>`;
-            });
+        // ==========================================
+        // PASTE YOUR SUPABASE KEYS BELOW INSIDE THE QUOTES
+        // ==========================================
+        const SUPABASE_URL = 'PASTE_YOUR_PROJECT_URL_HERE';
+        const SUPABASE_KEY = 'PASTE_YOUR_ANON_PUBLIC_KEY_HERE';
 
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // Fetch all rows from cloud database
+        async function loadData() {
+            const { data, error } = await supabaseClient
+                .from('finances')
+                .select('*')
+                .order('created_at', { ascending: true });
+
+            if (error) {
+                document.getElementById('dashboard').innerHTML = 
+                    `<p class="text-red-500 col-span-3">Error connecting to database. Check that your SUPABASE_URL and SUPABASE_KEY are pasted properly!</p>`;
+                return;
+            }
+            buildDashboard(data);
+        }
+
+        // Save new entry to cloud database
+        document.getElementById('finance-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submit-btn');
+            btn.textContent = 'Saving...';
+            btn.disabled = true;
+
+            const category = document.getElementById('category').value;
+            const item = document.getElementById('item').value.trim();
+            const amount = parseFloat(document.getElementById('amount').value);
+
+            await supabaseClient.from('finances').insert([{ category, item, amount }]);
+
+            document.getElementById('item').value = '';
+            document.getElementById('amount').value = '';
+            btn.textContent = '+ Save to Cloud';
+            btn.disabled = false;
+            loadData();
+        });
+
+        // Delete an entry when clicking the trash/delete button
+        async function deleteItem(id) {
+            await supabaseClient.from('finances').delete().eq('id', id);
+            loadData();
+        }
+
+        // Render the cards on screen
         function buildDashboard(data) {
             const dashboard = document.getElementById('dashboard');
-            dashboard.innerHTML = ''; // Clear the loading text
-            
-            // Group the spreadsheet rows by their Category
+            dashboard.innerHTML = '';
+
+            let grandTotal = 0;
+
+            if (data.length === 0) {
+                dashboard.innerHTML = `<p class="text-slate-500 col-span-3">Your database is connected and empty! Use the form above to add your first entry.</p>`;
+                document.getElementById('grand-total').textContent = '₹0';
+                return;
+            }
+
             const categories = {};
             data.forEach(row => {
-                if (!categories[row.Category]) categories[row.Category] = [];
-                categories[row.Category].push(row);
+                if (!categories[row.category]) categories[row.category] = [];
+                categories[row.category].push(row);
+                grandTotal += parseFloat(row.amount) || 0;
             });
 
-            // Build a visual card for each Category
+            document.getElementById('grand-total').textContent = `₹${grandTotal.toLocaleString('en-IN')}`;
+
             for (const [category, items] of Object.entries(categories)) {
                 let total = 0;
                 let rowsHtml = '';
-                
-                items.forEach(item => {
-                    const amount = parseFloat(item.Amount) || 0;
+
+                items.forEach(entry => {
+                    const amount = parseFloat(entry.amount) || 0;
                     total += amount;
                     rowsHtml += `
-                        <div class="flex justify-between py-3 border-b border-slate-100 last:border-0 text-sm">
-                            <span class="text-slate-600">${item.Item}</span>
-                            <span class="font-medium text-slate-800">₹${amount.toLocaleString('en-IN')}</span>
+                        <div class="flex justify-between items-center py-2.5 border-b border-slate-100 last:border-0 text-sm group">
+                            <span class="text-slate-600">${entry.item}</span>
+                            <div class="flex items-center gap-3">
+                                <span class="font-medium text-slate-800">₹${amount.toLocaleString('en-IN')}</span>
+                                <button onclick="deleteItem(${entry.id})" title="Delete entry" class="text-slate-300 hover:text-red-500 transition font-bold px-1">✕</button>
+                            </div>
                         </div>
                     `;
                 });
 
-                const cardHtml = `
-                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 hover:shadow-md transition-shadow">
-                        <h2 class="text-lg font-semibold mb-4 text-indigo-600 uppercase tracking-wider text-xs">${category}</h2>
-                        <div class="mb-4">
-                            ${rowsHtml}
+                dashboard.innerHTML += `
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between">
+                        <div>
+                            <h2 class="text-xs font-bold mb-4 text-indigo-600 uppercase tracking-wider">${category}</h2>
+                            <div class="mb-4">${rowsHtml}</div>
                         </div>
-                        <div class="flex justify-between font-bold text-slate-800 pt-4 border-t border-slate-200">
+                        <div class="flex justify-between font-bold text-slate-900 pt-4 border-t border-slate-200">
                             <span>Total</span>
                             <span>₹${total.toLocaleString('en-IN')}</span>
                         </div>
                     </div>
                 `;
-                dashboard.innerHTML += cardHtml;
             }
         }
+
+        // Load data immediately when opening the site
+        loadData();
     </script>
 </body>
 </html>
