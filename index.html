@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Financial Dashboard</title>
+    <!-- Tailwind CSS makes the website look modern and beautiful automatically -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PapaParse is a free tool that reads your CSV spreadsheet -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+</head>
+<body class="bg-gray-50 p-6 md:p-10 font-sans">
+    <div class="max-w-5xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8 text-slate-800 tracking-tight">Net Worth & Expenses Tracker</h1>
+        
+        <!-- This empty grid is where your spreadsheet data will appear -->
+        <div id="dashboard" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <p class="text-slate-500">Loading your financial data...</p>
+        </div>
+    </div>
+
+    <script>
+        // 1. Fetch the spreadsheet file
+        fetch('data.csv')
+            .then(response => response.text())
+            .then(csvText => {
+                // 2. Convert the CSV text into structured data
+                Papa.parse(csvText, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        buildDashboard(results.data);
+                    }
+                });
+            })
+            .catch(error => {
+                document.getElementById('dashboard').innerHTML = 
+                    `<p class="text-red-500">Could not load data.csv. Make sure the file is uploaded to GitHub!</p>`;
+            });
+
+        function buildDashboard(data) {
+            const dashboard = document.getElementById('dashboard');
+            dashboard.innerHTML = ''; // Clear the loading text
+            
+            // Group the spreadsheet rows by their Category
+            const categories = {};
+            data.forEach(row => {
+                if (!categories[row.Category]) categories[row.Category] = [];
+                categories[row.Category].push(row);
+            });
+
+            // Build a visual card for each Category
+            for (const [category, items] of Object.entries(categories)) {
+                let total = 0;
+                let rowsHtml = '';
+                
+                items.forEach(item => {
+                    const amount = parseFloat(item.Amount) || 0;
+                    total += amount;
+                    rowsHtml += `
+                        <div class="flex justify-between py-3 border-b border-slate-100 last:border-0 text-sm">
+                            <span class="text-slate-600">${item.Item}</span>
+                            <span class="font-medium text-slate-800">₹${amount.toLocaleString('en-IN')}</span>
+                        </div>
+                    `;
+                });
+
+                const cardHtml = `
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 hover:shadow-md transition-shadow">
+                        <h2 class="text-lg font-semibold mb-4 text-indigo-600 uppercase tracking-wider text-xs">${category}</h2>
+                        <div class="mb-4">
+                            ${rowsHtml}
+                        </div>
+                        <div class="flex justify-between font-bold text-slate-800 pt-4 border-t border-slate-200">
+                            <span>Total</span>
+                            <span>₹${total.toLocaleString('en-IN')}</span>
+                        </div>
+                    </div>
+                `;
+                dashboard.innerHTML += cardHtml;
+            }
+        }
+    </script>
+</body>
+</html>
